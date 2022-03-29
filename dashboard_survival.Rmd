@@ -1,0 +1,896 @@
+---
+title: "Analiza przeżycia"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+library(datasets)
+library(survminer)
+library(shinydashboard)
+library(IPDfromKM)
+library(survminer)
+library(survival)
+library(plotly)
+library(ggplot2)
+library(shiny)
+library(dplyr)
+library(survRM2)
+library(downloadthis)
+library(data.table)
+library(readxl)
+library(survHE)
+library(cowplot)
+library(DT)
+library(webshot)
+
+data <- read_excel("ipd.xlsx")
+
+```
+
+Opis
+=========================================
+
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+
+### **Wstęp**
+
+<br>
+
+Jedną z metod oceny korzyści stosowanych w ocenie technologii medycznych jest analiza prawdopodobieństwa przeżycia na podstawie krzywych Kaplana-Meiera. Stosowanie tej metody w procesie decyzyjnym ma pewne ograniczenia. Oszacowanie korzyści ekonomicznych wynikających z zastosowania interwencji na podstawie jest trudne - publikowane wykresy nierzadko przedstawiają przebieg samych krzywych bez określonych przedziałów ufności *(ang. CI - confidence interval)* oraz wyników miar służących do oszacowania prawdopodobieństwa zdarzenia. Podejmowanie decyzji w oparciu o ograniczone dane może prowadzić do niepełnej oceny kosztów oraz korzyści wynikających z ocenianej interwencji. Publikowane krzywe przeważnie obejmują ograniczony czas badania i podlegają wysokiemu stopniowi cenzurowania. Efektem jest niedoszacowane prawdopodobieństwo przeżycia, które może prowadzić do niedokładnych szacunków opłacalności. 
+
+Celem niniejszej aplikacji jest dostarczenie narzędzia do przeprowadzania kompleksowej analizy przeżycia dla badań dwuramiennych na podstawie własnych danych lub na podstawie opublikowanych wykresów zawierających krzywe Kaplana-Meiera. 
+
+
+
+### **Zastosowane narzędzia**
+
+Całość procesu przeprowadzono w środowisku R. Procedura rekonstrukcji indywidualnych danych pacjenta przeprowadzono przy użyciu pakietu **IPDfromKM**. Jest to metoda odtworzenia pierwotnych danych na podstawie opublikowanych krzywych Kaplana-Meiera. Analizę przeżycia metodą Kaplana-Meiera oraz wizualizację otrzymanych wyników przeprowadzono wykorzystując pakiet **survminer**. Analizę pola pod krzywymi przeżycia Kaplana-Meiera przeprowadzono korzystając z pakietu **survRM2** służącego do porównania ograniczonego średniego czasu przeżycia pomiędzy badanymi grupami. Do przeprowadzenia ekstrapolacji wykorzystano pakiet **survHE**. 
+
+<br>
+
+* **R Version 4.1.2/RStudio**
+
+* **survHE**: Survival Analysis in Health Economic Evaluation **Version**: 1.1.2 (2021-02-08)
+
+* **survminer**: rawing Survival Curves using 'ggplot2' **Version:** 0.4.9 (2021-03-09)
+
+* **survRM2**: Comparing Restricted Mean Survival Time    **Version:** 1.0-3 (2020-06-12)
+
+* **shiny**: Web Application Framework for R  **Version:** 1.7.1 (2021-01-10)
+
+
+
+Column
+-----------------------------------------------------------------------
+
+### **Metodyka**
+
+**Rekonstrukcja danych**
+
+Jest to metoda odtworzenia pierwotnych danych na podstawie opublikowanych krzywych przeżycia Kaplana-Meiera. Wynikiem zastosowanej procedury jest zestaw danych IPD. Na podstawie ekstrakcji współrzędnych przebiegu krzywych dostępnych w wykresie źródłowym oraz dostępnych danych dotyczących pacjentów w zagrożeniu zastosowany algorytm rekonstruuje indywidualne dane pacjenta.
+
+**Wizualna ocena prezycji rekonstrukcji**
+
+Celem weryfikacji przyjętych założeń przeprowadzana jest wizualna ocena przebiegu zrekonstruowanych rozkładów przeżycia porównano liczbę pacjentów uzyskaną w procedurze rekonstrukcji z liczbą pacjentów wprowadzoną ręcznie liczbę pacjentów w zagrożeniu. Zbliżone rozkłady świadczą o braku istotnych różnic pomiędzy zrekonstruowanymi danymi, a danymi z oznaczonych współrzędnymi ręcznie na wykresie źródłowym.
+
+
+**Analiza mediany czasu przeżycia metodą Kaplana-Meiera** 
+
+Mediana czasu przeżycia jest punktem czasowym, w którym prawdopodobieństwo przeżycia wynosi 50%. Inaczej mówiąc, przedstawia czas, w którym zgon lub progresja choroby nastąpiła u połowy pacjentów. Mediana szacuje parametr w określonym punkcie czasowym. Test **logrank** oceniaja istotność różnić pomiędzy krzywymi przeżycia. Hipoteza zerowa zakłada brak różnic w rozkładzie przeżycia pomiędzy krzywymi reprezentującymi grupy terapeutyczne. 
+
+**Analiza ograniczonego średniego czasu przeżycia** 
+
+
+W literaturze medycznej wartość obszaru pod przebiegiem krzywej Kaplana-Meiera reprezentowana jest wartością RMST, która mierzy ograniczony średni czas przeżycia od początku obserwacji do określonego punktu definiowanego jako czas obcięcia (ang. truncation time, tau). Obszar powyżej krzywej Kaplana-Meiera reprezentuje ograniczony średni czas utracony (RMTL). RMST (restricted mean survival time) można interpretować jako średni czas przeżycia wolny od zdarzeń do określonego punktu czasowego tau. W odróżnieniu od mediany przeżycia, przedstawiającej czas przeżycia w danym punkcie czasowym, RMST przedstawia czas przeżycia do danego punktu czasowego.
+
+
+**Analiza ryzyka względnego**
+
+Model proporcjonalnego hazardu Coxa określa stosunek częstości zgonów pomiędzy grupami w danym czasie wystąpienia zdarzenia zależnego jest od zmiennych objaśniającycych - w tym przypadku zastosowanego schematu leczenia. W celu oceny wpływu ocenianej interwencji na prawdopodobieństwo wystąpienia zgonu na podstawie zrekostruowanych danych oszacowano współczynik ryzyka w postaci hazardu względnego *(HR - hazard ratio)*. 
+Wartość HR < 1 świadczy o zmniejszeniu zagrożenia 
+
+**•	Parametryczna ekstrapolacja funkcji przeżycia poza horyzont badania**
+
+W związku zapewnieniem właściwego podejścia do ekstrapolacji **National Institute for Health and Care Excellence (NICE)** opublikował dokument wsparcia technicznego dotyczący właściwego doboru metod przy przeprowadzania parametrycznej ekstrapolacji funkcji przeżycia w procesie oceny technologii medycznych. Ekstrapolację przeprowadzono w oparciu o zalecenia zawarte w dokumencie. W celu zapewnienia jak największej precyzji doboru rozkładu przedstawiono w formie tabelarycznej wartości kryterium informacyjnego AIC i BIC. Najmniejsza wartość świadczy o najlepszym dopasowaniu rozkładu). W formie tabelarycznej przedstawiono wartość RMST ekstrapolowanej funkcji zgodnie z zastosowanym rozkładem i punktem odcięcia. 
+
+Zrekonstruuj dane
+=========================================
+
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+**Współrzędne przebiegu krzywych**
+
+```{r}
+fileInput("file2", "Grupa interwencyjna", accept = ".xlsx")
+fileInput("file3", "Grupa kontrolna", accept = ".xlsx")
+selectInput("maxy", label = "Skala osi y", choices = c(1,100), selected = 1)
+sliderInput("maxx", "Horyzont badania (oś y)", min = 0, max = 150, value = 35)
+numericInput("intervalx", "Interwał osi y", value = 5)
+textInput("nrisk_arm0", "Pacjenci w zagrożeniu (interwencja)", "78,45,30,20,11,5,1,0")
+textInput("nrisk_arm1", "Pacjenci w zagrożeniu (komparator)", "38,14,6,2,2,0,0,0")
+textInput("label_arm0", "Etykieta grupy interwencyjnej", "interwencja")
+textInput("label_arm1", "Etykieta grupy kontrolnej", value = "komparator")
+```
+
+
+
+Column
+-----------------------------------------------------------------------
+### **Instrukcja**
+
+Przeprowadź procedurę rekonstrukcji zgodnie z poniższymi krokami:
+
+**1. Współrzędne przebiegu krzywych**: wprowadź dane dotyczące współrzędnych przebiegu krzywych Kaplana-Meiera korzystając z zewnętrznego programu typu *digitize* (https://apps.automeris.io/wpd/) odpowiednio dla grupy interwencyjnej **(arm0)**, jak i kontrolnej **(arm1)**. Dane powinny zawierać kolumny **x** (współrzędne osi x) i **y** (współrzędne osi y). Wymagany format danych to *.xslx*
+
+**2. Skala osi y**: wybierz wartość maksymalną osi *y*, tj. 1 lub 100
+
+**3. Horyzont badania** wprowadź wartość maksymalną osi *x* odpowiadającą końcu obserwacji
+
+**4. Interwał osi y**: wprowadź interwał osi *y*
+
+**5. Pacjenci w zagrożeniu**: na podstawie tabeli pacjentów narażonych na zdarzenie (potocznie nazywana tabelą *at risk*) wprowadź dane dotyczące pacjentów będących w zagrożeniu. Dane powinny być odseparowane przecinkami, a liczba obserwacji w grupie interwencyjnej oraz kontrolnej musi być równa
+
+**6. Etykieta grupy interwencyjnej**: wpisz nazwy identyfikujące dla grupy interwencyjnej i kontrolnej
+
+**7. Ocena precyzji rekonstrukcji**: oceń wizualnie precyzję ekstrakcji współrzędnych Jeżeli stopień precyzji jest niesatysfakcjonujący przeprowadź ekstrakcję współrzędnych jeszcze raz.
+
+<br>
+
+**Przykładowy zbiór danych**
+
+```{r echo = F}
+arm0 <- read_excel("arm0.xlsx")
+data  %>%
+  download_this(
+    output_name = "arm0",
+    output_extension = ".xlsx",
+    button_label = "Pobierz współrzędne dla grupy interwencyjnej",
+    button_type = "primary",
+    has_icon = TRUE,
+    icon = "fa fa-save"
+  )
+
+
+
+```
+
+<br>
+
+```{r echo = F}
+arm0 <- read_excel("arm1.xlsx")
+data  %>%
+  download_this(
+    output_name = "arm1",
+    output_extension = ".xlsx",
+    button_label = "Pobierz współrzędne dla grupy kontrolnej",
+    button_type = "primary",
+    has_icon = TRUE,
+    icon = "fa fa-save"
+  )
+
+```
+
+### **Zrekonstruowane dane IPD**
+
+```{r}
+
+renderDataTable({
+  
+getpoints_arm01 <- input$file2$datapath
+getpoints_arm0 <-  readxl::read_excel(getpoints_arm01)
+
+getpoints_arm11 <- input$file3$datapath
+getpoints_arm1 <-  readxl::read_excel(getpoints_arm11)
+
+
+preprocess_arm0 = preprocess(getpoints_arm0,
+                                 trisk = seq(0,
+                                             as.numeric(input$maxx),
+                                             as.numeric(input$intervalx)),
+                                 nrisk = as.numeric(unlist(strsplit(input$nrisk_arm0,","))),
+                                 maxy = as.numeric(input$maxy))
+    
+getIPD_arm0 <-  getIPD(preprocess_arm0, armID = 1)
+    
+preprocess_arm1 = preprocess(getpoints_arm1,
+                                 trisk = seq(0,
+                                             as.numeric(input$maxx),
+                                             as.numeric(input$intervalx)),
+                                 nrisk = as.numeric(unlist(strsplit(input$nrisk_arm0,","))),
+                                 maxy = as.numeric(input$maxy))
+    
+getIPD_arm0 <-  getIPD(preprocess_arm0, armID = 1)
+getIPD_arm1 <-  getIPD(preprocess_arm1, armID = 2)
+
+    
+ipd <- rbind( 
+  data.frame(getIPD_arm0$IPD, "arm" = "0", "group" = input$label_arm0),
+  data.frame(getIPD_arm1$IPD, "arm" = "1", "group" = input$label_arm1))
+ 
+   datatable(ipd, extensions = 'Buttons', options = list(
+    scrollX=T,text = 'Show All',lengthMenu = list(c(length(ipd$time)), c('All')),
+    dom = 'Blfrtip', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+})
+
+```
+
+
+Column
+-----------------------------------------------------------------------
+**Ocena prezycji rekonstrukcji**
+
+###  **Grupa interwencyjna**
+
+```{r}
+renderPlot({
+  
+getpoints_arm01 <- input$file2$datapath
+getpoints_arm0 <-  readxl::read_excel(getpoints_arm01)
+
+
+
+preprocess_arm0 = preprocess(getpoints_arm0,
+                                 trisk = seq(0,
+                                             as.numeric(input$maxx),
+                                             as.numeric(input$intervalx)),
+                                 nrisk = as.numeric(unlist(strsplit(input$nrisk_arm0,","))),
+                                 maxy = as.numeric(input$maxy))
+    
+getIPD_arm0 <-  getIPD(preprocess_arm0, armID = 1)
+    
+plot(getIPD_arm0)
+
+})
+```
+
+###  **Grupa kontrolna**
+
+```{r}
+renderPlot({
+
+getpoints_arm11 <- input$file3$datapath
+getpoints_arm1 <-  readxl::read_excel(getpoints_arm11)
+
+preprocess_arm1 = preprocess(getpoints_arm1,
+                                 trisk = seq(0,
+                                             as.numeric(input$maxx),
+                                             as.numeric(input$intervalx)),
+                                 nrisk = as.numeric(unlist(strsplit(input$nrisk_arm0,","))),
+                                 maxy = as.numeric(input$maxy))
+    
+getIPD_arm1 <-  getIPD(preprocess_arm1, armID = 2)
+
+plot(getIPD_arm1)
+
+})
+```
+
+
+
+Wprowadź dane
+=========================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+**Wprowadź dane wejściowe**
+
+
+```{r}
+
+fileInput("file1", "Wczytaj dane", 
+                              accept = ".xlsx")
+```
+
+
+
+Column
+-----------------------------------------------------------------------
+
+### **Instrukcja**
+
+Wczytaj dane wejściowe w formacie *.xlsx*. Dane powinny zawierać następujące zmienne:
+
+* **time**: czas wystąpienia zdarzenia
+
+* **status**: indeks wystąpienia zdarzenia, odpowiednio 1 dla wystąpienia zdarzenia oraz 0, gdy zdarzenie nie nastąpiło
+
+* **arm**: indeks grup, odpowiednio 0 dla grupy interwencyjnej oraz 1 dla grupy kontrolnej
+
+* **group**: nazwa etykiety identyfikacyjnej
+
+### **Przykładowy wzór danych wejśćiowych**
+
+```{r echo = F}
+
+knitr::kable(head(data))
+
+```
+
+```{r}
+data <- read_excel("ipd.xlsx")
+data  %>%
+  download_this(
+    output_name = "survival",
+    output_extension = ".xlsx",
+    button_label = "Pobierz przykładowy zbiór danych",
+    button_type = "primary",
+    has_icon = TRUE,
+    icon = "fa fa-save"
+  )
+```
+
+
+Column
+-----------------------------------------------------------------------
+
+### **Wprowadzone dane wejściowe**
+
+```{r}
+renderTable({
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+ 
+ipd
+  
+})
+```
+
+
+
+
+
+Analiza KM
+=========================================
+
+Column {data-width=500}
+-----------------------------------------------------------------------
+### **Metodyka**
+
+
+**Mediana czasu przeżycia** jest punktem czasowym, w którym prawdopodobieństwo przeżycia wynosi 50%. Inaczej mówiąc, przedstawia czas, w którym zgon lub progresja choroby nastąpiła u połowy pacjentów. Mediana szacuje parametr **w określonym punkcie czasowym.**
+
+
+**Test logrank**
+
+Test logrank oceniaja istotność różnić pomiędzy krzywymi przeżycia. Hipoteza zerowa zakłada brak różnic w rozkładzie przeżycia pomiędzy krzywymi reprezentującymi grupy terapeutyczne. W wyniku zastosowanego testu uzyskano wartość p mniejszą niż 0,05. Oznacza to, że nie mamy dowodów any przyjąż h0 stanowiącej, że pomiędzy grupami zachodzą różnice.
+
+Hipotezy dla testu logrank:
+
+* H^0^: brak różnic w rozkładzie przeżycia
+* H^1^: pomiędzy rozkładami zachodzą istotne różnice
+
+
+
+### **Średnie czas przeżycia**
+
+
+```{r error=F}
+
+
+sliderInput("time", label = "Wybierz punkt odcięcia",
+            min = 1, max = 100, value = 12, step = 0.01)
+
+renderDataTable({
+  
+ipd1 <- input$file1$datapath
+ipd <-  readxl::read_excel(ipd1)
+
+time <- as.numeric(input$time)
+
+
+fit_km <-  surv_fit(Surv(time, status) ~ group, data = ipd)
+km_table <- round(unclass(summary(fit_km, rmean = input$time)$table),2)
+km_table <- km_table[,-1:-2]
+colnames(km_table) <- c("n obserwacji", "n zdarzeń", "RMST", "SE RMST", "Mediana", "0.95LCI", "0.95UCI")
+
+datatable(km_table, extensions = 'Buttons', options = list(
+    dom = 'tB', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+})
+
+```
+
+
+
+
+Column  {.tabset .tabset-fade}
+-----------------------------------------------------------------------
+
+
+### **Krzywe KM**
+
+```{r error=F}
+
+renderPlotly({
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+ 
+head(ipd)
+dane <- as.data.frame(ipd)
+
+dane
+
+  fit_km <-  surv_fit(Surv(time, status) ~ group, data = dane)
+  
+  
+km_plot <- ggsurvplot(fit_km,
+                      data=ipd, 
+                      pval = TRUE,
+                      pval.method = T,
+                      conf.int = TRUE,
+                      conf.int.style = "step",
+                      ggtheme = theme_pubclean(),
+                      surv.median.line = "hv",
+                      risk.table = T)
+ggplotly(km_plot$plot)
+    
+})
+```
+
+
+### **Cumulative Hazard**
+
+
+```{r}
+
+renderPlotly({
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+ 
+head(ipd)
+dane <- as.data.frame(ipd)
+
+dane
+
+fit_km <-  surv_fit(Surv(time, status) ~ group, data = dane)
+  
+  
+cumhaz_plot <- ggsurvplot(fit_km,
+                          fun = "cumhaz",
+                          data=ipd, 
+                          pval = F, 
+                          pval.method = T,
+                          conf.int = TRUE,
+                          conf.int.style = "step",
+                          ggtheme = theme_pubclean(),
+                          surv.median.line = "hv")
+
+ggplotly(cumhaz_plot$plot)
+    
+})
+```
+
+### **Cumulative events**
+
+```{r}
+
+renderPlotly({
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+ 
+head(ipd)
+dane <- as.data.frame(ipd)
+
+dane
+
+  fit_km <-  surv_fit(Surv(time, status) ~ group, data = dane)
+  
+  
+event_plot <- ggsurvplot(fit_km,
+                          fun = "event",
+                          data=ipd, 
+                          pval = F, 
+                          pval.method = T,
+                          conf.int = TRUE,
+                          conf.int.style = "step",
+                          ggtheme = theme_pubclean(),
+                          surv.median.line = "hv")
+ggplotly(event_plot$plot)
+})
+```
+
+
+Analiza RMST
+=========================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+
+sliderInput("tau", label = "Wybierz punkt odcięcia",
+            min = 1, max = 100, value = 12, step = 0.1)
+```
+
+**Uwaga** Punkt odcięcia nie może być większy niż punkt czasowy równy wspólnemu maksymalnemu przebiegowi ramion w badaniu
+
+Column
+-----------------------------------------------------------------------
+### **Metodyka**
+
+
+Wartość obszaru pod przebiegiem krzywej Kaplana-Meiera reprezentowana jest wartością **RMST**, która mierzy ograniczony średni czas przeżycia od początku obserwacji do określonego punktu definiowanego jako czas obcięcia **(ang. truncation time, tau)**. Obszar powyżej krzywej Kaplana-Meiera reprezentuje ograniczony średni czas utracony (RMTL). 
+
+RMST (restricted mean survival time) można interpretować jako średni czas przeżycia wolny od zdarzeń do określonego punktu czasowego, tau. W odróżnieniu od mediany, przedstawiającej 50% przeżycia w danym punkcie czasowym, RMST przedstawia czas przeżycia do danego punktu czasowego.  
+
+
+Punkt czasowy równy maksymalnemu wspólnemu przebiegowi ramion:  
+```{r}
+
+renderText({
+    
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+rmst2(time = ipd$time, status = ipd$status, ipd$arm)$tau %>%
+  round(2)
+
+})
+
+```
+
+### **Wartość RMST dla wspólnego maksymalnego punktu czasowego**
+
+
+```{r}
+
+renderPlot({
+    
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+    rmst2(time = ipd$time, status = ipd$status, ipd$arm) %>%
+      plot(
+        xlab = "Time",
+        ylab = "Survival",
+        col = "black",
+        col.RMST = "#2E9FDF",
+        col.RMTL = "#E7B800",
+        density = 80,
+        angle = 85)
+})
+
+```
+
+
+
+
+Column
+-----------------------------------------------------------------------
+
+### **Grupa interwencyjna**
+
+```{r}
+
+renderDataTable({
+
+ipd1 <- input$file1$datapath
+ipd <-  readxl::read_excel(ipd1)
+
+tau <- as.numeric(input$tau)
+
+  
+rm <- rmst2(time = ipd$time, status = ipd$status, ipd$arm, tau = input$tau) 
+
+rm_arm0 <- round(rm$RMST.arm0$result,2)
+colnames(rm_arm0) <- c(" ", "SE", "0.95 LCI", "0.95UCI")
+
+datatable(rm_arm0, extensions = 'Buttons', options = list(
+    scrollX=T,text = 'Show All',
+    dom = 'tB', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+})
+
+
+```
+
+
+### **Grupa kontrolna**
+
+```{r}
+
+renderDataTable({
+
+ipd1 <- input$file1$datapath
+ipd <-  readxl::read_excel(ipd1)
+
+  tau <- as.numeric(input$tau)
+
+  
+rm <- rmst2(time = ipd$time, status = ipd$status, ipd$arm, tau = input$tau) 
+
+rm_arm1 <- round(rm$RMST.arm1$result,2)
+colnames(rm_arm1) <- c(" ", "SE", "0.95 LCI", "0.95UCI")
+
+
+datatable(rm_arm1, extensions = 'Buttons', options = list(
+    scrollX=T,text = 'Show All',
+    dom = 'tB', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+})
+
+
+```
+
+
+### **Wielkość efektu**
+
+```{r}
+
+renderDataTable({
+
+ipd1 <- input$file1$datapath
+ipd <-  readxl::read_excel(ipd1)
+
+tau <- as.numeric(input$tau)
+
+  
+rm <- rmst2(time = ipd$time, status = ipd$status, ipd$arm, tau = input$tau) 
+rm_ratio <- round(rm$unadjusted.result,2)[,-4]
+colnames(rm_ratio) <- c(" ", "0.95 LCI", "0.95 UCI")
+
+datatable(rm_ratio, extensions = 'Buttons', options = list(
+    dom = 'tB', 
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+})
+
+
+```
+
+
+
+Analiza HR
+=========================================
+
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### **Metodyka**
+
+
+
+Model proporcjonalnego hazardu Coxa określa stosunek częstości zgonów pomiędzy grupami w danym czasie wystąpienia zdarzenia zależnego jest od zmiennych objaśniającycych - w tym przypadku zastosowanego schematu leczenia. W celu oceny wpływu ocenianej interwencji na prawdopodobieństwo wystąpienia zgonu na podstawie zrekostruowanych danych oszacowano współczynik ryzyka w postaci hazardu względnego *(HR - hazard ratio)*.
+
+Założenia proporcjonalnego hazardu Coxa:
+
+- HR <1: zmniejszenie zagrożenia
+
+- HR = 0: brak zmian
+
+- HR> 1: wzrost zagrożenia
+
+### **Współczynnik zagrożeń**
+
+```{r}
+
+renderDataTable({
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+
+
+time = ipd$time
+status = ipd$status
+arm= relevel(factor(ipd$arm), ref = "1")
+
+formula = Surv(time, status) ~ arm
+
+hr <- coxph(formula)
+
+hr_ratio <- unclass(summary(hr))$conf.int %>%
+  round(2)
+colnames(hr_ratio) <- c("HR", "exp (-coef)", "0.95 LCI", "0.95 UCI")
+  
+datatable(hr_ratio, extensions = 'Buttons', options = list(
+    dom = 'tB', 
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+  
+})
+
+```
+
+
+
+Column {data-width=600}
+-----------------------------------------------------------------------
+
+###
+
+
+```{r}
+
+renderPlot({ 
+  
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+
+
+time = ipd$time
+status = ipd$status
+arm= relevel(factor(ipd$arm), ref = "1")
+
+formula = Surv(time, status) ~ arm
+
+hr <- coxph(formula)
+ggforest(hr, data = ipd, fontsize = 1.3, refLabel = "Grupa kontrolna", main = "Współczynnik ryzyka - HR")
+  
+  })
+
+```
+
+
+Ekstrapolacja
+=========================================
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+sliderInput("extime", label = "Wybierz punkt odcięcia ekstrapolowanej funkcji",
+            min = 1, max = 200, value = 60, step = 1)
+
+selectInput("dist", "Wybierz rozkład",
+             c("Wykładniczy" = "exp", 
+               "Weibull" = "weibull", 
+               "Gamma" = "gamma", 
+               "Log-normalny" = "lnorm", 
+               "Log-logistyczny" = "llogis", 
+               "Gompertza" = "gompertz"))
+
+```
+
+
+
+
+
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### **Metodyka**
+
+
+W przeprowadzonej ekstrapolacji funkcji przeżycia zastosowano główne rozkłady parametryczne
+stosowane w analizach HTA. Przy doborze odpowiedniego rozkładu parametrycznego posłużono się wizualną oceą dopasowania rozkładu oraz kryterium informacyjnym Akaikego *(ang. Akaike Information Criterion, AIC)*. Przyjęto założenie, że najniższa wartość AIC stanowi o lepszym dopasowaniu rozkładu. Zgodnie z zaleceniami NICE zastosowano ten sam typ rozkładu dla obydwu analizowanych grup. 
+
+<br>
+
+ **Wartość RMST**
+```{r}
+renderDataTable({
+  
+  
+ipd1 <- input$file1$datapath
+
+ipd <-  readxl::read_excel(ipd1)
+
+
+flexrm_arm0 <- summary(flexsurvreg(Surv(time, status) ~ as.factor(arm), data = ipd, dist = input$dist),type = "rmst",t = as.numeric(input$extime))$`as.factor(arm)=0`
+
+flexrm_arm1 <- summary(flexsurvreg(Surv(time, status) ~ as.factor(arm), data = ipd, dist = input$dist),type = "rmst",t = as.numeric(input$extime))$`as.factor(arm)=1`
+
+flextable <- rbind(flexrm_arm0,flexrm_arm1, deparse.level = F) %>%
+  round(2)
+
+colnames(flextable) <- c("tau", "RMST", "0.95LCI", "0.95UCI")
+row.names(flextable) <- c("Interwencja", "Komparator")
+
+datatable(flextable, rownames = T,extensions = 'Buttons', options = list(
+    dom = 'tB', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+})
+
+
+
+```
+
+### **Kryterium informacyjne AIC i BIC** 
+```{r}
+
+renderDataTable({
+  
+ 
+  ipd1 <- input$file1$datapath
+
+  ipd <-  readxl::read_excel(ipd1)
+ 
+  formula <- Surv(time, status) ~ as.factor(arm)
+  mods <- c("exp", "weibull", "gamma", "lnorm", "llogis", "gompertz") 
+  Distribution <- c("Expotential", "Weibulls", "Gamma", "Log normal","Log-logistic","Gompertz")
+  
+  m1 <- fit.models(formula = formula, 
+                 data = ipd, 
+                 distr = mods) 
+distribution  <- c("Wykładniczy", "Weibulla", "Gamma", "Log-normalny","Log-logistyczny","Gompertza")
+aic <- round(m1$model.fitting$aic,2) 
+bic <- round(m1$model.fitting$bic,2) 
+aic_table <- data.frame(distribution, aic, bic) 
+colnames(aic_table) <- c("Rozkład", "AIC", "BIC")
+
+datatable(aic_table,rownames = F, extensions = 'Buttons', options = list(
+    dom = 'tB', style = "auto",
+    buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+})
+
+
+```
+
+####
+
+Column {data-width=700}
+-----------------------------------------------------------------------
+
+### **Dopasowanie rozkładu**
+ 
+```{r}
+
+
+renderPlotly({
+  
+  t <- as.numeric(input$extime)
+
+  ipd1 <- input$file1$datapath
+
+  ipd <-  readxl::read_excel(ipd1)
+  
+  ipd$arm <- factor(ipd$arm, levels = c("0", "1"))
+  formula <- Surv(time, status) ~ arm
+  
+  mods <- c("exp", "weibull", "gamma", "lnorm", "llogis", "gompertz") 
+  Distribution <- c("Expotential", "Weibulls", "Gamma", "Log normal","Log-logistic","Gompertz")
+  
+  m1 <- fit.models(formula = formula, 
+                 data = ipd, 
+                 distr = mods)
+  
+    ex_plot <- plot(m1,
+       add.km = T, 
+       t = seq(.1, t),
+       lab.profile = c("Grupa eksperymentalna","Grupa kontrolna")) +
+      theme(panel.grid.minor.y = element_blank())+
+      scale_y_continuous(breaks=c(0, 0.1, 0.25, 0.5, 0.75, 1)) +
+      geom_hline(yintercept=0.1, linetype="dashed", color = "deepskyblue4")
+    
+  ggplotly(plot(ex_plot))
+
+})
+
+```
+
+
+
+Literatura
+=========================================
+
+
+- Na Liu, Yanhong Zhou, J. Jack Lee. IPDfromKM: Reconstruct Individual Patient Data from Published Kaplan-Meier Survival Curves - https://www.researchsquare.com/article/rs-117525/v1
+
+- P. Guyot, AE. Ades, M. JNM. Ouwens, N. J.Welton. Enhanced secondary analysis of survival data: reconstructing the data from published Kaplan-Meier survival curves - https://pubmed.ncbi.nlm.nih.gov/22297116/
+
+- R. Perry, M. Taylor, L. Lewis, A. Yellowlees, K. Fleetwood, T. Barata. Estimating Survival Data from Published Kaplan-Meier Curves: a Comparison of Methods - 
+https://pubmed.ncbi.nlm.nih.gov/27200548/
+
+
+
